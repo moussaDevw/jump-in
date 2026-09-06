@@ -1,0 +1,484 @@
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum EventStatus {
+  DRAFT     @map("draft")
+  PUBLISHED @map("published")
+  CANCELLED @map("cancelled")
+}
+
+enum EventVisibility {
+  PUBLIC   @map("public")
+  UNLISTED @map("unlisted")
+}
+
+enum PaymentProvider {
+  WAVE         @map("wave")
+  ORANGE_MONEY @map("orange_money")
+  FREE_MONEY   @map("free_money")
+  CARD         @map("card")
+}
+
+enum RegistrationStatus {
+  PENDING    @map("pending")
+  PAID       @map("paid")
+  CHECKED_IN @map("checked_in")
+  CANCELLED  @map("cancelled")
+}
+
+enum PaymentStatus {
+  PENDING @map("pending")
+  SUCCESS @map("success")
+  FAILED  @map("failed")
+}
+
+enum MessageKind {
+  TEXT     @map("text")
+  LOCATION @map("location")
+  SYSTEM   @map("system")
+}
+
+enum NotificationType {
+  REMINDER @map("reminder")
+  JOIN     @map("join")
+  SPOT     @map("spot")
+  MESSAGE  @map("message")
+  PAYMENT  @map("payment")
+  INVITE   @map("invite")
+}
+
+enum PlatformType {
+  IOS     @map("ios")
+  ANDROID @map("android")
+}
+
+enum ClubRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+model User {
+  id           String                                @id @default(uuid()) @db.Uuid
+  email        String?                               @unique
+  username     String?                               @unique
+  firstName    String?                               @map("first_name")
+  lastName     String?                               @map("last_name")
+  avatarUrl    String?                               @map("avatar_url")
+  bio          String?
+  city         String?
+  coords       Unsupported("geometry(Point, 4326)")?
+  /// Mode éco-data (images basse résolution pour économiser la bande passante réseau)
+  ecoData      Boolean                               @default(false) @map("eco_data")
+  notifEnabled Boolean                               @default(true) @map("notif_enabled")
+  onboardingCompleted Boolean                               @default(false) @map("onboarding_completed")
+  isAdmin             Boolean                               @default(false) @map("is_admin")
+  /// Soft-delete : ne JAMAIS supprimer physiquement un User (préserve messages, inscriptions,
+  /// références organisateur). Toutes les requêtes applicatives filtrent deletedAt IS NULL.
+  deletedAt    DateTime?                             @map("deleted_at") @db.Timestamptz
+  createdAt    DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  identities             UserIdentity[]
+  organizedEvents        Event[]         @relation("UserEvents")
+  sports                 UserSport[]
+  paymentMethods         PaymentMethod[]
+  registrations          Registration[]  @relation("UserRegistrations")
+  checkedInRegistrations Registration[]  @relation("RegistrationsCheckedIn")
+  payments               Payment[]       @relation("UserPayments")
+  followedClubs          ClubFollow[]
+  favorites              Favorite[]
+  messages               Message[]
+  likes                  Like[]
+  receivedNotifications  Notification[]  @relation("UserReceivedNotifications")
+  triggeredNotifications Notification[]  @relation("UserTriggeredNotifications")
+  devices                Device[]
+  clubMemberships        ClubMember[]
+  ownedClubs             Club[]          @relation("ClubOwner")
+  joinRequests           ClubJoinRequest[]
+
+  /// Hash bcrypt du refresh token actif
+  refreshHash  String?   @map("refresh_hash")
+
+  @@index([coords], type: Gist)
+  @@map("users")
+}
+
+model UserIdentity {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  provider   String   // 'google' | 'apple'
+  providerId String   @map("provider_id") // Identifiant unique du provider ('sub')
+  email      String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@map("user_identities")
+}
+
+model Sport {
+  id      String @id @default(uuid()) @db.Uuid
+  slug    String @unique
+  labelFr String @map("label_fr")
+  color   String
+
+  // Relations inverses
+  events Event[]     @relation("SportEvents")
+  users  UserSport[]
+  clubs  ClubSport[]
+
+  @@map("sports")
+}
+
+model UserSport {
+  userId  String @map("user_id") @db.Uuid
+  sportId String @map("sport_id") @db.Uuid
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sportId])
+  @@index([sportId])
+  @@map("user_sports")
+}
+
+model ClubSport {
+  clubId  String @map("club_id") @db.Uuid
+  sportId String @map("sport_id") @db.Uuid
+
+  club  Club  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([clubId, sportId])
+  @@index([sportId])
+  @@map("club_sports")
+}
+
+model ClubFollow {
+  userId    String   @map("user_id") @db.Uuid
+  clubId    String   @map("club_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@id([userId, clubId])
+  @@index([clubId])
+  @@map("club_follows")
+}
+
+model ClubMember {
+  clubId    String   @map("club_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      ClubRole @default(MEMBER)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([clubId, userId])
+  @@index([userId])
+  /// Contrainte "un seul OWNER par club" : index unique partiel -> voir migration_constraints.sql
+  @@map("club_members")
+}
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventId])
+  @@index([eventId])
+  @@map("favorites")
+}
+
+model Like {
+  userId    String   @map("user_id") @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventId])
+  @@index([eventId])
+  @@map("likes")
+}
+
+model Club {
+  id        String                                @id @default(uuid()) @db.Uuid
+  name      String
+  handle    String                                @unique
+  ownerId   String?                               @map("owner_id") @db.Uuid
+  bio       String?
+  logoUrl   String?                               @map("logo_url")
+  coverUrl  String?                               @map("cover_url")
+  baseName  String?                               @map("base_name")
+  coords    Unsupported("geometry(Point, 4326)")?
+  verified  Boolean                               @default(false)
+  createdAt DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  events    Event[]      @relation("ClubEvents")
+  sports    ClubSport[]
+  followers ClubFollow[]
+  members   ClubMember[]
+  owner     User?        @relation("ClubOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  joinRequests ClubJoinRequest[]
+
+  @@index([coords], type: Gist)
+  @@index([ownerId])
+  @@map("clubs")
+}
+
+model Event {
+  id          String                                @id @default(uuid()) @db.Uuid
+  organizerId String                                @map("organizer_id") @db.Uuid
+  // Restrict explicite : on n'efface jamais un event via la suppression de l'organisateur
+  // (User est en soft-delete de toute façon).
+  organizer   User                                  @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Restrict)
+  clubId      String?                               @map("club_id") @db.Uuid
+  club        Club?                                 @relation("ClubEvents", fields: [clubId], references: [id], onDelete: SetNull)
+  sportId     String                                @map("sport_id") @db.Uuid
+  sport       Sport                                 @relation("SportEvents", fields: [sportId], references: [id], onDelete: Restrict)
+  title       String
+  description String?
+  coverUrl    String?                               @map("cover_url")
+  startsAt    DateTime                              @map("starts_at") @db.Timestamptz
+  endsAt      DateTime?                             @map("ends_at") @db.Timestamptz
+  venueName   String?                               @map("venue_name")
+  coords      Unsupported("geometry(Point, 4326)")?
+  googlePlaceId String?                             @map("google_place_id")
+  city        String?                               @map("city")
+  country     String?                               @map("country")
+  /// Capacité max. Validation applicative DANS UNE TRANSACTION avec verrou ligne event
+  /// (SELECT ... FOR UPDATE) pour éviter la sur-réservation. Voir le service d'inscription.
+  capacity    Int?
+  /// Prix. 0 = gratuit. Règle métier : aucun Payment si price = 0.
+  price       Int                                   @default(0) @map("price")
+  currency    String                                @default("XOF")
+  status      EventStatus                           @default(DRAFT)
+  visibility  EventVisibility                       @default(PUBLIC)
+  shareSlug   String                                @unique @map("share_slug")
+  createdAt   DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  gallery       EventGallery[]
+  registrations Registration[]
+  favoritedBy   Favorite[]
+  messages      Message[]
+  likes         Like[]
+  notifications Notification[]
+
+  @@index([organizerId])
+  @@index([clubId])
+  @@index([sportId])
+  // Index du feed public : status = PUBLISHED AND visibility = PUBLIC AND starts_at > now() ORDER BY starts_at
+  @@index([status, visibility, startsAt])
+  @@index([coords], type: Gist)
+  @@map("events")
+}
+
+model EventGallery {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  url       String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([eventId])
+  @@map("event_galleries")
+}
+
+model EventPhoto {
+  id             String       @id @default(uuid()) @db.Uuid
+  registrationId String       @map("registration_id") @db.Uuid
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  url            String
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([registrationId])
+  @@map("event_photos")
+}
+
+model Message {
+  id        String      @id @default(uuid()) @db.Uuid
+  eventId   String      @map("event_id") @db.Uuid
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  senderId  String      @map("sender_id") @db.Uuid
+  // Cascade conservé mais ne se déclenche jamais : User en soft-delete -> l'historique du chat reste intact.
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  metadata  Json?
+  kind      MessageKind @default(TEXT)
+  pinned    Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([eventId, createdAt])
+  @@index([senderId])
+  @@index([eventId, pinned])
+  @@map("messages")
+}
+
+model PaymentMethod {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   PaymentProvider
+  accountRef String          @map("account_ref")
+  /// Contrainte "une seule méthode par défaut par user" : index unique partiel -> voir migration_constraints.sql
+  isDefault  Boolean         @default(false) @map("is_default")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  payments Payment[]
+
+  @@index([userId])
+  @@map("payment_methods")
+}
+
+model Registration {
+  id            String             @id @default(uuid()) @db.Uuid
+  eventId       String             @map("event_id") @db.Uuid
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId        String             @map("user_id") @db.Uuid
+  user          User               @relation("UserRegistrations", fields: [userId], references: [id], onDelete: Cascade)
+  /// Code du ticket unique encodé dans le QR. Généré automatiquement par l'application.
+  ticketCode    String             @unique @map("ticket_code")
+  status        RegistrationStatus
+  checkedInAt   DateTime?          @map("checked_in_at") @db.Timestamptz
+  checkedInById String?            @map("checked_in_by") @db.Uuid
+  checkedInBy   User?              @relation("RegistrationsCheckedIn", fields: [checkedInById], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  payments Payment[] // 1:N : permet les ré-essais (un seul SUCCESS garanti par index SQL)
+  photos   EventPhoto[]
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  // Sert le décompte capacité et le roster : WHERE event_id = ? AND status <> 'cancelled'
+  @@index([eventId, status])
+  @@index([checkedInById])
+  @@map("registrations")
+}
+
+model Payment {
+  id              String          @id @default(uuid()) @db.Uuid
+  registrationId  String          @map("registration_id") @db.Uuid
+  registration    Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  userId          String          @map("user_id") @db.Uuid
+  user            User            @relation("UserPayments", fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethodId String?         @map("payment_method_id") @db.Uuid
+  paymentMethod   PaymentMethod?  @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  provider        PaymentProvider
+  amount          Int             @map("amount")
+  fee             Int             @map("fee")
+  currency        String          @default("XOF")
+  status          PaymentStatus
+  providerRef     String?         @map("provider_ref")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Idempotence des webhooks PSP : un même (provider, providerRef) ne peut être inséré 2 fois.
+  // providerRef NULL autorisé en multiple (paiements PENDING avant retour PSP).
+  @@unique([provider, providerRef])
+  @@index([registrationId])
+  @@index([userId])
+  @@index([paymentMethodId])
+  @@map("payments")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  user      User             @relation("UserReceivedNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  actorId   String?          @map("actor_id") @db.Uuid
+  actor     User?            @relation("UserTriggeredNotifications", fields: [actorId], references: [id], onDelete: SetNull)
+  eventId   String?          @map("event_id") @db.Uuid
+  event     Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  body      String
+  readAt    DateTime?        @map("read_at") @db.Timestamptz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // [userId] seul retiré : couvert par le préfixe gauche des deux index composites ci-dessous.
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@index([actorId])
+  @@index([eventId])
+  @@map("notifications")
+}
+
+model Device {
+  id         String       @id @default(uuid()) @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushToken  String       @unique @map("push_token")
+  platform   PlatformType
+  revokedAt  DateTime?    @map("revoked_at") @db.Timestamptz
+  lastSeenAt DateTime     @default(now()) @map("last_seen_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("devices")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+enum JoinRequestStatus {
+  PENDING   @map("pending")
+  APPROVED  @map("approved")
+  REJECTED  @map("rejected")
+}
+
+model ClubJoinRequest {
+  id        String            @id @default(uuid()) @db.Uuid
+  clubId    String            @map("club_id") @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  status    JoinRequestStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+  @@map("club_join_requests")
+}
+
