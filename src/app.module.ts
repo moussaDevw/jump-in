@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UsersModule } from './users/users.module';
@@ -15,6 +16,8 @@ import { SearchModule } from './search/search.module';
 import { EventsModule } from './events/events.module';
 import { UploadModule } from './upload/upload.module';
 import { LocationModule } from './location/location.module';
+import { FeedModule } from './feed/feed.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,6 +36,7 @@ import { LocationModule } from './location/location.module';
         limit: 100,  // max 100 requests per minute (sustained protection)
       },
     ]),
+    CommonModule,
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -42,6 +46,8 @@ import { LocationModule } from './location/location.module';
     EventsModule,
     UploadModule,
     LocationModule,
+    FeedModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

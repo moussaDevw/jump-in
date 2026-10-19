@@ -3,79 +3,42 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { OAuth2Client } from 'google-auth-library';
-import appleSignin from 'apple-signin-auth';
 import { VerifyOAuthDto } from './dto/verify-oauth.dto';
+import { IOAuthProviderStrategy } from './interfaces/oauth-provider.interface';
+import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
+import { AppleOAuthStrategy } from './strategies/apple-oauth.strategy';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly strategies = new Map<string, IOAuthProviderStrategy>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) { }
+    googleStrategy: GoogleOAuthStrategy,
+    appleStrategy: AppleOAuthStrategy,
+  ) {
+    this.strategies.set(googleStrategy.provider, googleStrategy);
+    this.strategies.set(appleStrategy.provider, appleStrategy);
+  }
 
   /**
    * Vérifie le token OAuth (Google ou Apple), trouve ou crée le User et retourne les tokens JWT.
    */
   async verifyOAuth(dto: VerifyOAuthDto) {
     this.logger.log(`Provider reçu: "${dto.provider}", idToken (début): "${dto.idToken.substring(0, 20)}..."`);
-    
-    let providerId: string;
-    let email: string | undefined;
-    let firstName = dto.firstName;
-    let lastName = dto.lastName;
 
-    if (dto.provider === 'google') {
-      try {
-        const clientId = this.configService.get('GOOGLE_CLIENT_ID');
-        const audiences = [
-          clientId,
-          this.configService.get('GOOGLE_CLIENT_ID_IOS'),
-          this.configService.get('GOOGLE_CLIENT_ID_ANDROID'),
-          this.configService.get('GOOGLE_CLIENT_ID_WEB'),
-        ].filter((a): a is string => Boolean(a));
-
-        this.logger.log(`Validation réelle avec Audiences autorisées: ${JSON.stringify(audiences)}`);
-        const client = new OAuth2Client(clientId);
-
-        const ticket = await client.verifyIdToken({
-          idToken: dto.idToken,
-          audience: audiences.length > 0 ? audiences : undefined,
-        });
-        const payload = ticket.getPayload();
-        if (!payload || !payload.sub) {
-          throw new UnauthorizedException('Payload Google idToken invalide');
-        }
-        this.logger.log(`Jeton validé avec succès ! Payload email: ${payload.email}`);
-        providerId = payload.sub;
-        email = payload.email;
-        if (payload.given_name && !firstName) firstName = payload.given_name;
-        if (payload.family_name && !lastName) lastName = payload.family_name;
-      } catch (e: any) {
-        this.logger.error(`Authentification Google échouée: ${e?.message || e}`);
-        throw new UnauthorizedException('Authentification Google échouée: ' + (e?.message || e));
-      }
-    } else if (dto.provider === 'apple') {
-      try {
-        const bundleId = this.configService.get('APPLE_CLIENT_ID') || 'com.jumpin.app';
-        this.logger.log(`Validation réelle pour bundleId: ${bundleId}`);
-        const result = await appleSignin.verifyIdToken(dto.idToken, {
-          audience: bundleId,
-          ignoreExpiration: false,
-        });
-        this.logger.log(`Jeton validé avec succès ! Email: ${result.email}`);
-        providerId = result.sub;
-        email = result.email;
-      } catch (e: any) {
-        this.logger.error(`Authentification Apple échouée: ${e?.message || e}`);
-        throw new UnauthorizedException('Authentification Apple échouée: ' + (e?.message || e));
-      }
-    } else {
-      throw new BadRequestException('Provider non supporté');
+    const strategy = this.strategies.get(dto.provider);
+    if (!strategy) {
+      throw new BadRequestException(`Provider non supporté: ${dto.provider}`);
     }
+
+    const { providerId, email, firstName, lastName } = await strategy.verifyToken(dto.idToken, {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+    });
 
     // 1. Chercher si l'identité OAuth existe déjà
     let identity = await this.prisma.userIdentity.findUnique({
@@ -92,9 +55,9 @@ export class AuthService {
 
     // 2. Si pas d'identité mais un email est renvoyé, vérifier si un User existe avec cet email
     if (!user && email) {
-      user = await this.prisma.user.findUnique({
+      user = (await this.prisma.user.findUnique({
         where: { email },
-      }) || undefined;
+      })) || undefined;
     }
 
     if (!user) {

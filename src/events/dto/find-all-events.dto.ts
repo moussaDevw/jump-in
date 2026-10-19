@@ -19,6 +19,14 @@ export class FindAllEventsDto {
   dateFilter?: 'today' | 'weekend' | 'week' | 'month' | string;
 
   @IsOptional()
+  @IsString()
+  price?: 'free' | 'paid' | 'all' | string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

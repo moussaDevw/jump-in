@@ -1,0 +1,60 @@
+model User {
+  id           String                                @id @default(uuid()) @db.Uuid
+  email        String?                               @unique
+  username     String?                               @unique
+  firstName    String?                               @map("first_name")
+  lastName     String?                               @map("last_name")
+  avatarUrl    String?                               @map("avatar_url")
+  bio          String?
+  city         String?
+  coords       Unsupported("geometry(Point, 4326)")?
+  /// Mode éco-data (images basse résolution pour économiser la bande passante réseau)
+  ecoData      Boolean                               @default(false) @map("eco_data")
+  notifEnabled Boolean                               @default(true) @map("notif_enabled")
+  onboardingCompleted Boolean                               @default(false) @map("onboarding_completed")
+  isAdmin             Boolean                               @default(false) @map("is_admin")
+  /// Soft-delete : ne JAMAIS supprimer physiquement un User (préserve messages, inscriptions,
+  /// références organisateur). Toutes les requêtes applicatives filtrent deletedAt IS NULL.
+  deletedAt    DateTime?                             @map("deleted_at") @db.Timestamptz
+  createdAt    DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  identities             UserIdentity[]
+  organizedEvents        Event[]         @relation("UserEvents")
+  sports                 UserSport[]
+  paymentMethods         PaymentMethod[]
+  registrations          Registration[]  @relation("UserRegistrations")
+  checkedInRegistrations Registration[]  @relation("RegistrationsCheckedIn")
+  payments               Payment[]       @relation("UserPayments")
+  followedClubs          ClubFollow[]
+  favorites              Favorite[]
+  messages               Message[]
+  likes                  Like[]
+  receivedNotifications  Notification[]  @relation("UserReceivedNotifications")
+  triggeredNotifications Notification[]  @relation("UserTriggeredNotifications")
+  devices                Device[]
+  clubMemberships        ClubMember[]
+  ownedClubs             Club[]          @relation("ClubOwner")
+  joinRequests           ClubJoinRequest[]
+
+  /// Hash bcrypt du refresh token actif
+  refreshHash  String?   @map("refresh_hash")
+
+  @@index([coords], type: Gist)
+  @@map("users")
+}
+
+model UserIdentity {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  provider   String   // 'google' | 'apple'
+  providerId String   @map("provider_id") // Identifiant unique du provider ('sub')
+  email      String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@map("user_identities")
+}

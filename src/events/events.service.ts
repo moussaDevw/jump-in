@@ -4,26 +4,26 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { FindAllEventsDto } from './dto/find-all-events.dto';
 import { EventStatus, ClubRole, Prisma } from '@prisma/client';
-import * as crypto from 'crypto';
+import { CodeGeneratorService } from '../common/services/code-generator.service';
+import { GeoSpatialService } from '../common/services/geospatial.service';
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly codeGenerator: CodeGeneratorService,
+    private readonly geoSpatial: GeoSpatialService,
+  ) { }
 
   /**
-   * Helper to generate a unique shareSlug.
+   * Helper to generate a unique shareSlug using CodeGeneratorService.
    */
   private async generateUniqueSlug(): Promise<string> {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let slug = '';
     let isUnique = false;
 
     while (!isUnique) {
-      slug = '';
-      for (let i = 0; i < 10; i++) {
-        slug += chars[crypto.randomInt(0, chars.length)];
-      }
-
+      slug = this.codeGenerator.generateSlug(10);
       const exists = await this.prisma.event.findUnique({
         where: { shareSlug: slug },
       });
@@ -98,9 +98,10 @@ export class EventsService {
       });
 
       if (coords) {
+        const pointSql = this.geoSpatial.formatPointSql(coords.lng, coords.lat);
         await tx.$executeRaw`
           UPDATE events
-          SET coords = ST_SetSRID(ST_MakePoint(${coords.lng}, ${coords.lat}), 4326)
+          SET coords = ${pointSql}
           WHERE id = ${event.id}::uuid
         `;
       }
@@ -204,9 +205,10 @@ export class EventsService {
       });
 
       if (coords) {
+        const pointSql = this.geoSpatial.formatPointSql(coords.lng, coords.lat);
         await tx.$executeRaw`
           UPDATE events
-          SET coords = ST_SetSRID(ST_MakePoint(${coords.lng}, ${coords.lat}), 4326)
+          SET coords = ${pointSql}
           WHERE id = ${id}::uuid
         `;
       }
@@ -312,14 +314,14 @@ export class EventsService {
 
     if (!event) return null;
 
-    // Get coords via raw query
+    // Get coords via raw query and GeoSpatialService
     const geo: any[] = await client.$queryRaw`
       SELECT ST_X(coords::geometry) as lng, ST_Y(coords::geometry) as lat
       FROM events
       WHERE id = ${id}::uuid
     `;
 
-    const coords = geo && geo[0] && geo[0].lng !== null ? { lat: geo[0].lat, lng: geo[0].lng } : null;
+    const coords = this.geoSpatial.extractCoordsFromRaw(geo && geo[0]);
 
     return {
       ...event,
@@ -378,6 +380,19 @@ export class EventsService {
 
     if (dto.clubId) {
       conditions.push(Prisma.sql`e.club_id = ${dto.clubId}::uuid`);
+    }
+
+    if (dto.price && dto.price !== 'all') {
+      if (dto.price === 'free') {
+        conditions.push(Prisma.sql`e.price = 0`);
+      } else if (dto.price === 'paid') {
+        conditions.push(Prisma.sql`e.price > 0`);
+      }
+    }
+
+    if (dto.city && dto.city !== 'all') {
+      const cityPattern = `%${dto.city}%`;
+      conditions.push(Prisma.sql`(e.city ILIKE ${cityPattern} OR e.venue_name ILIKE ${cityPattern})`);
     }
 
     if (q) {
@@ -539,12 +554,7 @@ export class EventsService {
       WHERE id = ANY(${eventIds}::uuid[])
     `;
 
-    const geoMap = new Map<string, { lat: number; lng: number }>();
-    for (const g of geoResults) {
-      if (g.lng !== null && g.lat !== null) {
-        geoMap.set(g.id, { lat: g.lat, lng: g.lng });
-      }
-    }
+    const geoMap = this.geoSpatial.buildCoordsMap(geoResults);
 
     return events.map((event) => ({
       ...event,

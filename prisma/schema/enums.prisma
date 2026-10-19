@@ -1,0 +1,62 @@
+enum EventStatus {
+  DRAFT     @map("draft")
+  PUBLISHED @map("published")
+  CANCELLED @map("cancelled")
+}
+
+enum EventVisibility {
+  PUBLIC   @map("public")
+  UNLISTED @map("unlisted")
+}
+
+enum PaymentProvider {
+  WAVE         @map("wave")
+  ORANGE_MONEY @map("orange_money")
+  FREE_MONEY   @map("free_money")
+  CARD         @map("card")
+}
+
+enum RegistrationStatus {
+  PENDING    @map("pending")
+  PAID       @map("paid")
+  CHECKED_IN @map("checked_in")
+  CANCELLED  @map("cancelled")
+}
+
+enum PaymentStatus {
+  PENDING @map("pending")
+  SUCCESS @map("success")
+  FAILED  @map("failed")
+}
+
+enum MessageKind {
+  TEXT     @map("text")
+  LOCATION @map("location")
+  SYSTEM   @map("system")
+}
+
+enum NotificationType {
+  REMINDER @map("reminder")
+  JOIN     @map("join")
+  SPOT     @map("spot")
+  MESSAGE  @map("message")
+  PAYMENT  @map("payment")
+  INVITE   @map("invite")
+}
+
+enum PlatformType {
+  IOS     @map("ios")
+  ANDROID @map("android")
+}
+
+enum ClubRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+enum JoinRequestStatus {
+  PENDING   @map("pending")
+  APPROVED  @map("approved")
+  REJECTED  @map("rejected")
+}

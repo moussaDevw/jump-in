@@ -1,0 +1,43 @@
+model PaymentMethod {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   PaymentProvider
+  accountRef String          @map("account_ref")
+  /// Contrainte "une seule méthode par défaut par user" : index unique partiel -> voir migration_constraints.sql
+  isDefault  Boolean         @default(false) @map("is_default")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  payments Payment[]
+
+  @@index([userId])
+  @@map("payment_methods")
+}
+
+model Payment {
+  id              String          @id @default(uuid()) @db.Uuid
+  registrationId  String          @map("registration_id") @db.Uuid
+  registration    Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  userId          String          @map("user_id") @db.Uuid
+  user            User            @relation("UserPayments", fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethodId String?         @map("payment_method_id") @db.Uuid
+  paymentMethod   PaymentMethod?  @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  provider        PaymentProvider
+  amount          Int             @map("amount")
+  fee             Int             @map("fee")
+  currency        String          @default("XOF")
+  status          PaymentStatus
+  providerRef     String?         @map("provider_ref")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Idempotence des webhooks PSP : un même (provider, providerRef) ne peut être inséré 2 fois.
+  // providerRef NULL autorisé en multiple (paiements PENDING avant retour PSP).
+  @@unique([provider, providerRef])
+  @@index([registrationId])
+  @@index([userId])
+  @@index([paymentMethodId])
+  @@map("payments")
+}

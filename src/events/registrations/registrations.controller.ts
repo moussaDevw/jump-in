@@ -1,5 +1,6 @@
 import { Controller, Post, Delete, Get, Param, Query, Body, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { RegistrationsService } from './registrations.service';
+import { CheckInService } from './check-in.service';
 import { ScanTicketDto } from './dto/scan-ticket.dto';
 import { EventOrganizerGuard } from '../guards/event-organizer.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -7,7 +8,10 @@ import { ApiResponse } from '../../common/dto/api-response.dto';
 
 @Controller('events')
 export class RegistrationsController {
-  constructor(private readonly registrationsService: RegistrationsService) {}
+  constructor(
+    private readonly registrationsService: RegistrationsService,
+    private readonly checkInService: CheckInService,
+  ) {}
 
   /**
    * POST /events/:id/register — Register the current user for an event.
@@ -55,7 +59,7 @@ export class RegistrationsController {
     @Param('registrationId', ParseUUIDPipe) registrationId: string,
     @CurrentUser('id') userId: string,
   ) {
-    const result = await this.registrationsService.toggleCheckIn(id, registrationId, userId);
+    const result = await this.checkInService.toggleCheckIn(id, registrationId, userId);
     return ApiResponse.success(result, 'Participant check-in status updated successfully');
   }
 
@@ -70,7 +74,7 @@ export class RegistrationsController {
     @Body() dto: ScanTicketDto,
     @CurrentUser('id') userId: string,
   ) {
-    const result = await this.registrationsService.scanTicket(id, dto.ticketCode, userId);
+    const result = await this.checkInService.scanTicket(id, dto.ticketCode, userId);
     return ApiResponse.success(result, result.message);
   }
 
@@ -99,4 +103,3 @@ export class RegistrationsController {
     return ApiResponse.success(result, 'My registrations retrieved successfully');
   }
 }
-

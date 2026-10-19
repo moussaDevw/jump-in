@@ -272,37 +272,37 @@ export class UsersService {
   // --- Helper methods ---
 
   private async findUserWithCoords(userId: string) {
-    const [user, geo] = await Promise.all([
-      this.prisma.user.findUnique({
-        where: { id: userId, deletedAt: null },
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          firstName: true,
-          lastName: true,
-          avatarUrl: true,
-          bio: true,
-          city: true,
-          ecoData: true,
-          notifEnabled: true,
-          onboardingCompleted: true,
-          createdAt: true,
-          updatedAt: true,
-          sports: {
-            select: {
-              sport: true,
-            },
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        bio: true,
+        city: true,
+        ecoData: true,
+        notifEnabled: true,
+        onboardingCompleted: true,
+        createdAt: true,
+        updatedAt: true,
+        sports: {
+          select: {
+            sport: true,
           },
         },
-      }),
-      this.prisma.$queryRaw<any[]>`
-        SELECT ST_X(coords::geometry) as lng, ST_Y(coords::geometry) as lat
-        FROM users
-        WHERE id = ${userId}::uuid
-      `,
-    ]);
+      },
+    });
+
     if (!user) return null;
+
+    const geo = await this.prisma.$queryRaw<any[]>`
+      SELECT ST_X(coords::geometry) as lng, ST_Y(coords::geometry) as lat
+      FROM users
+      WHERE id = ${userId}::uuid
+    `;
 
     const coords = geo && geo[0] && geo[0].lng !== null ? { lat: geo[0].lat, lng: geo[0].lng } : null;
 

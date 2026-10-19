@@ -1,0 +1,71 @@
+model Club {
+  id        String                                @id @default(uuid()) @db.Uuid
+  name      String
+  handle    String                                @unique
+  ownerId   String?                               @map("owner_id") @db.Uuid
+  bio       String?
+  logoUrl   String?                               @map("logo_url")
+  coverUrl  String?                               @map("cover_url")
+  baseName  String?                               @map("base_name")
+  coords    Unsupported("geometry(Point, 4326)")?
+  verified  Boolean                               @default(false)
+  createdAt DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations inverses
+  events    Event[]      @relation("ClubEvents")
+  sports    ClubSport[]
+  followers ClubFollow[]
+  members   ClubMember[]
+  owner     User?        @relation("ClubOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  joinRequests ClubJoinRequest[]
+
+  @@index([coords], type: Gist)
+  @@index([ownerId])
+  @@map("clubs")
+}
+
+model ClubMember {
+  clubId    String   @map("club_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      ClubRole @default(MEMBER)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([clubId, userId])
+  @@index([userId])
+  /// Contrainte "un seul OWNER par club" : index unique partiel -> voir migration_constraints.sql
+  @@map("club_members")
+}
+
+model ClubFollow {
+  userId    String   @map("user_id") @db.Uuid
+  clubId    String   @map("club_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@id([userId, clubId])
+  @@index([clubId])
+  @@map("club_follows")
+}
+
+model ClubJoinRequest {
+  id        String            @id @default(uuid()) @db.Uuid
+  clubId    String            @map("club_id") @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  status    JoinRequestStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+  @@map("club_join_requests")
+}

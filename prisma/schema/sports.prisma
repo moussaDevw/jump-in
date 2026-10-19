@@ -1,0 +1,37 @@
+model Sport {
+  id      String @id @default(uuid()) @db.Uuid
+  slug    String @unique
+  labelFr String @map("label_fr")
+  color   String
+
+  // Relations inverses
+  events Event[]     @relation("SportEvents")
+  users  UserSport[]
+  clubs  ClubSport[]
+
+  @@map("sports")
+}
+
+model UserSport {
+  userId  String @map("user_id") @db.Uuid
+  sportId String @map("sport_id") @db.Uuid
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sportId])
+  @@index([sportId])
+  @@map("user_sports")
+}
+
+model ClubSport {
+  clubId  String @map("club_id") @db.Uuid
+  sportId String @map("sport_id") @db.Uuid
+
+  club  Club  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([clubId, sportId])
+  @@index([sportId])
+  @@map("club_sports")
+}
