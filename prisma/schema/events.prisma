@@ -11,6 +11,7 @@ model Event {
   title       String
   description String?
   coverUrl    String?                               @map("cover_url")
+  whatsappGroupUrl String?                          @map("whatsapp_group_url")
   startsAt    DateTime                              @map("starts_at") @db.Timestamptz
   endsAt      DateTime?                             @map("ends_at") @db.Timestamptz
   venueName   String?                               @map("venue_name")

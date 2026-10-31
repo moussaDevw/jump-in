@@ -1,12 +1,16 @@
 import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { VerifyOAuthDto } from './dto/verify-oauth.dto';
+import { SendEmailOtpDto } from './dto/send-email-otp.dto';
+import { VerifyEmailOtpDto } from './dto/verify-email-otp.dto';
 import { IOAuthProviderStrategy } from './interfaces/oauth-provider.interface';
 import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 import { AppleOAuthStrategy } from './strategies/apple-oauth.strategy';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +21,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
     googleStrategy: GoogleOAuthStrategy,
     appleStrategy: AppleOAuthStrategy,
   ) {
@@ -146,6 +151,169 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  /**
+   * Envoie un code OTP à 6 chiffres par e-mail avec rate-limiting de renvoi (45s).
+   */
+  async sendEmailOtp(dto: SendEmailOtpDto) {
+    const existing = await this.prisma.emailOtp.findUnique({
+      where: { email: dto.email },
+    });
+
+    // Cooldown anti-spam : 45 secondes entre 2 demandes pour le même email
+    if (existing) {
+      const elapsedMs = Date.now() - existing.updatedAt.getTime();
+      if (elapsedMs < 45 * 1000) {
+        const remainingSeconds = Math.ceil((45 * 1000 - elapsedMs) / 1000);
+        throw new BadRequestException(
+          `Veuillez patienter ${remainingSeconds} seconde(s) avant de demander un nouveau code.`
+        );
+      }
+    }
+
+    // Code aléatoire cryptographiquement sécurisé à 6 chiffres
+    const code = randomInt(100000, 1000000).toString();
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Valide 10 minutes
+
+    await this.prisma.emailOtp.upsert({
+      where: { email: dto.email },
+      create: {
+        email: dto.email,
+        codeHash,
+        expiresAt,
+        attempts: 0,
+      },
+      update: {
+        codeHash,
+        expiresAt,
+        attempts: 0,
+      },
+    });
+
+    await this.mailService.sendOtpCode(dto.email, code);
+
+    return {
+      message: 'Un code de vérification à 6 chiffres a été envoyé à votre adresse e-mail.',
+      expiresInSeconds: 600,
+    };
+  }
+
+  /**
+   * Vérifie le code OTP à 6 chiffres, crée ou connecte le User et retourne les tokens JWT.
+   */
+  async verifyEmailOtp(dto: VerifyEmailOtpDto) {
+    const otpRecord = await this.prisma.emailOtp.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestException(
+        'Aucun code actif pour cette adresse e-mail. Veuillez en demander un nouveau.'
+      );
+    }
+
+    // Vérification expiration
+    if (otpRecord.expiresAt.getTime() < Date.now()) {
+      await this.prisma.emailOtp.delete({ where: { email: dto.email } }).catch(() => {});
+      throw new BadRequestException(
+        'Le code de vérification a expiré. Veuillez demander un nouveau code.'
+      );
+    }
+
+    // Sécurité anti brute-force : max 5 tentatives par code
+    if (otpRecord.attempts >= 5) {
+      await this.prisma.emailOtp.delete({ where: { email: dto.email } }).catch(() => {});
+      throw new BadRequestException(
+        'Trop de tentatives incorrectes. Veuillez demander un nouveau code.'
+      );
+    }
+
+    const isMatch = await bcrypt.compare(dto.code, otpRecord.codeHash);
+    if (!isMatch) {
+      const nextAttempts = otpRecord.attempts + 1;
+      await this.prisma.emailOtp.update({
+        where: { email: dto.email },
+        data: { attempts: nextAttempts },
+      });
+
+      const remainingAttempts = 5 - nextAttempts;
+      throw new UnauthorizedException(
+        remainingAttempts > 0
+          ? `Code incorrect. Il vous reste ${remainingAttempts} tentative(s).`
+          : 'Code incorrect. Nombre maximal de tentatives atteint, veuillez demander un nouveau code.'
+      );
+    }
+
+    // Code valide : supprimer l'OTP consommé
+    await this.prisma.emailOtp.delete({ where: { email: dto.email } }).catch(() => {});
+
+    // 1. Chercher si l'utilisateur existe déjà avec cet email
+    let user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    const isNewUser = !user;
+
+    if (!user) {
+      // 2. Création de l'utilisateur avec son identité 'email'
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          onboardingCompleted: false,
+          identities: {
+            create: {
+              provider: 'email',
+              providerId: dto.email,
+              email: dto.email,
+            },
+          },
+        },
+      });
+    } else {
+      // 3. Si l'utilisateur existait (ex: créé via OAuth ou invitation), lier l'identité email si absente
+      const emailIdentity = await this.prisma.userIdentity.findUnique({
+        where: {
+          provider_providerId: {
+            provider: 'email',
+            providerId: dto.email,
+          },
+        },
+      });
+
+      if (!emailIdentity) {
+        await this.prisma.userIdentity.create({
+          data: {
+            userId: user.id,
+            provider: 'email',
+            providerId: dto.email,
+            email: dto.email,
+          },
+        }).catch(() => {});
+      }
+    }
+
+    // 4. Génération des tokens JWT
+    const tokens = await this.generateTokens(user.id, user.email, user.username);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    this.logger.log(`Connexion e-mail réussie pour User ID=${user.id}, email=${user.email} (isNewUser=${isNewUser})`);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      isNewUser,
+    };
   }
 
   /**

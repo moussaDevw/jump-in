@@ -25,6 +25,11 @@ export class CreateEventDto {
   @IsUrl()
   coverUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  whatsappGroupUrl?: string;
+
   @IsNotEmpty()
   @IsDateString()
   startsAt: string;

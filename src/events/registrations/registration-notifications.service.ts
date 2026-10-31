@@ -31,14 +31,16 @@ export class RegistrationNotificationsService {
         ? `${participant.firstName || ''} ${participant.lastName || ''}`.trim() || 'Un participant'
         : 'Un participant';
 
-      await this.notificationsService.sendToUser({
-        userId: event.organizerId,
+      await this.notificationsService.sendLocalizedToUser(event.organizerId, {
         actorId: userId,
         eventId,
         type: NotificationType.JOIN,
-        title: 'Nouvelle inscription !',
-        body: `${participantName} a rejoint votre événement « ${event.title} »`,
-        data: { eventId },
+        template: 'EVENT_REGISTRATION',
+        params: {
+          participantName,
+          eventTitle: event.title,
+        },
+        data: { eventId, type: 'EVENT_REGISTRATION' },
       });
     } catch (err) {
       this.logger.error(`Failed to send JOIN notification for event ${eventId}`, err);
@@ -64,14 +66,16 @@ export class RegistrationNotificationsService {
         ? `${participant.firstName || ''} ${participant.lastName || ''}`.trim() || 'Un participant'
         : 'Un participant';
 
-      await this.notificationsService.sendToUser({
-        userId: event.organizerId,
+      await this.notificationsService.sendLocalizedToUser(event.organizerId, {
         actorId: userId,
         eventId,
         type: NotificationType.JOIN,
-        title: 'Désistement',
-        body: `${participantName} a annulé sa participation à « ${event.title} »`,
-        data: { eventId },
+        template: 'EVENT_CANCELLATION',
+        params: {
+          participantName,
+          eventTitle: event.title,
+        },
+        data: { eventId, type: 'EVENT_CANCELLATION' },
       });
     } catch (err) {
       this.logger.error(`Failed to send cancellation notification for event ${eventId}`, err);
@@ -101,12 +105,14 @@ export class RegistrationNotificationsService {
         .filter((id) => id !== cancelledUserId);
 
       if (targetUserIds.length > 0) {
-        await this.notificationsService.sendToUsers(targetUserIds, {
+        await this.notificationsService.sendLocalizedToUsers(targetUserIds, {
           eventId,
           type: NotificationType.SPOT,
-          title: 'Une place s’est libérée !',
-          body: `Une place est de nouveau disponible pour « ${event.title} »`,
-          data: { eventId },
+          template: 'SPOT_AVAILABLE',
+          params: {
+            eventTitle: event.title,
+          },
+          data: { eventId, type: 'SPOT_AVAILABLE' },
         });
       }
     } catch (err) {

@@ -11,12 +11,12 @@ export class SearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly geoSpatial: GeoSpatialService,
-  ) {}
+  ) { }
 
   /**
    * Search clubs with optional geolocation and sport filters.
    */
-  async searchClubs(dto: SearchClubsDto) {
+  async searchClubs(dto: SearchClubsDto, userId?: string) {
     const { q, sportId, lat, lng, radius = 10000, page = 1, limit = 10 } = dto;
     const offset = (page - 1) * limit;
 
@@ -41,15 +41,19 @@ export class SearchService {
     if (lat !== undefined && lng !== undefined) {
       const userPoint = this.geoSpatial.formatPointSql(lng, lat);
       selectDistance = Prisma.sql`ROUND(ST_Distance(c.coords::geography, ${userPoint}::geography)::numeric, 0) as distance`;
-      
+
       if (radius !== undefined) {
         conditions.push(Prisma.sql`ST_DWithin(c.coords::geography, ${userPoint}::geography, ${radius})`);
       }
       orderBy = Prisma.sql`distance ASC, c.created_at DESC`;
     }
 
-    const whereClause = conditions.length > 0 
-      ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}` 
+    const priorityOrder = userId
+      ? Prisma.sql`CASE WHEN c.owner_id = ${userId}::uuid THEN 0 ELSE 1 END,`
+      : Prisma.empty;
+
+    const whereClause = conditions.length > 0
+      ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
       : Prisma.empty;
 
     // Count query
@@ -83,7 +87,7 @@ export class SearchService {
         ${selectDistance}
       FROM clubs c
       ${whereClause}
-      ORDER BY ${orderBy}
+      ORDER BY ${priorityOrder} ${orderBy}
       LIMIT ${limit} OFFSET ${offset}
     `;
 
@@ -122,6 +126,8 @@ export class SearchService {
         name: c.name,
         handle: c.handle,
         ownerId: c.ownerId,
+        isOwner: Boolean(userId && c.ownerId === userId),
+        myRole: userId && c.ownerId === userId ? 'OWNER' : null,
         bio: c.bio,
         logoUrl: c.logoUrl,
         coverUrl: c.coverUrl,

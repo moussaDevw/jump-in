@@ -5,12 +5,28 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DevicesService } from './devices.service';
 import { PushNotificationService } from './push-notification.service';
 import { NotificationQueryDto } from './dto/notification-query.dto';
+import {
+  formatNotification,
+  normalizeLocale,
+  NotificationTemplateKey,
+  NotificationTemplateParams,
+  SupportedLocale,
+} from './notifications.i18n';
 
 export interface SendNotificationParams {
   userId: string;
   type: NotificationType;
-  title: string;
-  body: string;
+  title: string | { fr: string; en: string };
+  body: string | { fr: string; en: string };
+  actorId?: string;
+  eventId?: string;
+  data?: Record<string, any>;
+}
+
+export interface SendLocalizedNotificationParams {
+  type: NotificationType;
+  template: NotificationTemplateKey;
+  params?: NotificationTemplateParams;
   actorId?: string;
   eventId?: string;
   data?: Record<string, any>;
@@ -45,23 +61,142 @@ export class NotificationsService {
   }
 
   /**
+   * Sends a localized notification to a single user using pre-defined templates.
+   */
+  async sendLocalizedToUser(
+    userId: string,
+    params: SendLocalizedNotificationParams,
+  ): Promise<Notification | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notifEnabled: true, locale: true },
+    });
+
+    if (!user) {
+      this.logger.warn(`User ${userId} not found when sending notification`);
+      return null;
+    }
+
+    const { title, body } = formatNotification(params.template, params.params, user.locale);
+
+    return this.sendToUser({
+      userId,
+      type: params.type,
+      title,
+      body,
+      actorId: params.actorId,
+      eventId: params.eventId,
+      data: {
+        ...(params.data || {}),
+        template: params.template,
+        templateParams: params.params,
+      },
+    });
+  }
+
+  /**
+   * Sends localized notifications to multiple users in bulk, formatting each user's
+   * message in their respective preferred language (fr/en).
+   */
+  async sendLocalizedToUsers(
+    userIds: string[],
+    params: SendLocalizedNotificationParams,
+  ): Promise<void> {
+    if (!userIds.length) return;
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+
+    // Fetch user preferences and locales
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uniqueUserIds } },
+      select: { id: true, notifEnabled: true, locale: true },
+    });
+
+    if (!users.length) return;
+
+    const usersByLocale = new Map<SupportedLocale, string[]>();
+    const enabledUsersByLocale = new Map<SupportedLocale, string[]>();
+
+    for (const u of users) {
+      const loc = normalizeLocale(u.locale);
+      if (!usersByLocale.has(loc)) {
+        usersByLocale.set(loc, []);
+        enabledUsersByLocale.set(loc, []);
+      }
+      usersByLocale.get(loc)!.push(u.id);
+      if (u.notifEnabled) {
+        enabledUsersByLocale.get(loc)!.push(u.id);
+      }
+    }
+
+    // For each locale, persist in-app notifications and send push messages
+    for (const [locale, targetIds] of usersByLocale.entries()) {
+      if (!targetIds.length) continue;
+
+      const { title, body } = formatNotification(params.template, params.params, locale);
+
+      await this.prisma.notification.createMany({
+        data: targetIds.map((userId) => ({
+          userId,
+          type: params.type,
+          body,
+          actorId: params.actorId,
+          eventId: params.eventId,
+        })),
+      });
+
+      const pushTargetIds = enabledUsersByLocale.get(locale) || [];
+      if (!pushTargetIds.length) continue;
+
+      const devices = await this.devicesService.getActiveDevicesForUsers(pushTargetIds);
+      if (!devices.length) continue;
+
+      const channelId = this.resolveChannelId(params.type);
+      const messages: ExpoPushMessage[] = devices.map((d) => ({
+        to: d.pushToken,
+        sound: 'default',
+        title,
+        body,
+        channelId,
+        data: {
+          ...(params.data || {}),
+          template: params.template,
+          templateParams: params.params,
+          type: params.type,
+          eventId: params.eventId,
+        },
+      }));
+
+      this.pushNotificationService.sendPushNotifications(messages).catch((err) => {
+        this.logger.error(`Failed to send bulk push notifications for locale ${locale}`, err);
+      });
+    }
+  }
+
+  /**
    * Creates an in-app notification in DB and sends a push notification to all active devices of a user.
    */
   async sendToUser(params: SendNotificationParams): Promise<Notification> {
     const { userId, type, title, body, actorId, eventId, data = {} } = params;
 
-    // 1. Fetch user to check global notification preferences
+    // 1. Fetch user to check global notification preferences and preferred locale
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { notifEnabled: true },
+      select: { notifEnabled: true, locale: true },
     });
+
+    const userLocale = normalizeLocale(user?.locale);
+    const resolvedTitle =
+      typeof title === 'object' ? title[userLocale] || title.fr || '' : title;
+    const resolvedBody =
+      typeof body === 'object' ? body[userLocale] || body.fr || '' : body;
 
     // 2. Persist in-app notification in DB
     const notification = await this.prisma.notification.create({
       data: {
         userId,
         type,
-        body,
+        body: resolvedBody,
         actorId,
         eventId,
       },
@@ -84,8 +219,8 @@ export class NotificationsService {
     const messages: ExpoPushMessage[] = devices.map((d) => ({
       to: d.pushToken,
       sound: 'default',
-      title,
-      body,
+      title: resolvedTitle,
+      body: resolvedBody,
       channelId,
       data: {
         ...data,
@@ -115,24 +250,35 @@ export class NotificationsService {
     // Unique user IDs
     const uniqueUserIds = Array.from(new Set(userIds));
 
-    // 1. Fetch user notification preferences
+    // 1. Fetch user notification preferences and locales
     const users = await this.prisma.user.findMany({
       where: { id: { in: uniqueUserIds } },
-      select: { id: true, notifEnabled: true },
+      select: { id: true, notifEnabled: true, locale: true },
     });
+    const userLocaleMap = new Map<string, SupportedLocale>(
+      users.map((u) => [u.id, normalizeLocale(u.locale)]),
+    );
     const enabledUserIds = new Set(
       users.filter((u) => u.notifEnabled).map((u) => u.id),
     );
 
+    const resolveField = (
+      val: string | { fr: string; en: string },
+      locale: SupportedLocale,
+    ): string => (typeof val === 'object' ? val[locale] || val.fr || '' : val);
+
     // 2. Batch create in-app notifications
     await this.prisma.notification.createMany({
-      data: uniqueUserIds.map((userId) => ({
-        userId,
-        type: params.type,
-        body: params.body,
-        actorId: params.actorId,
-        eventId: params.eventId,
-      })),
+      data: uniqueUserIds.map((userId) => {
+        const userLoc = userLocaleMap.get(userId) || 'fr';
+        return {
+          userId,
+          type: params.type,
+          body: resolveField(params.body, userLoc),
+          actorId: params.actorId,
+          eventId: params.eventId,
+        };
+      }),
     });
 
     // 3. Fetch active devices for enabled users
@@ -144,18 +290,21 @@ export class NotificationsService {
 
     // 4. Construct push messages
     const channelId = this.resolveChannelId(params.type);
-    const messages: ExpoPushMessage[] = devices.map((d) => ({
-      to: d.pushToken,
-      sound: 'default',
-      title: params.title,
-      body: params.body,
-      channelId,
-      data: {
-        ...(params.data || {}),
-        type: params.type,
-        eventId: params.eventId,
-      },
-    }));
+    const messages: ExpoPushMessage[] = devices.map((d) => {
+      const userLoc = userLocaleMap.get(d.userId) || 'fr';
+      return {
+        to: d.pushToken,
+        sound: 'default',
+        title: resolveField(params.title, userLoc),
+        body: resolveField(params.body, userLoc),
+        channelId,
+        data: {
+          ...(params.data || {}),
+          type: params.type,
+          eventId: params.eventId,
+        },
+      };
+    });
 
     // 5. Send push notifications
     this.pushNotificationService.sendPushNotifications(messages).catch((err) => {

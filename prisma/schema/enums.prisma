@@ -60,3 +60,16 @@ enum JoinRequestStatus {
   APPROVED  @map("approved")
   REJECTED  @map("rejected")
 }
+
+enum ActivitySource {
+  IN_APP_TRACKER @map("in_app_tracker")
+  APPLE_HEALTH   @map("apple_health")
+  HEALTH_CONNECT @map("health_connect")
+  MANUAL         @map("manual")
+}
+
+enum ActivityVisibility {
+  PUBLIC    @map("public")
+  FOLLOWERS @map("followers")
+  PRIVATE   @map("private")
+}

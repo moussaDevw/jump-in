@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { SportsService } from './sports.service';
 import { CreateSportDto } from './dto/create-sport.dto';
@@ -5,6 +6,7 @@ import { UpdateSportDto } from './dto/update-sport.dto';
 import { Admin } from '../common/decorators/admin.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 
+@ApiTags('Sports')
 @Controller('sports')
 export class SportsController {
   constructor(private readonly sportsService: SportsService) {}

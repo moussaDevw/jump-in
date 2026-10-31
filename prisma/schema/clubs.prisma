@@ -6,10 +6,11 @@ model Club {
   bio       String?
   logoUrl   String?                               @map("logo_url")
   coverUrl  String?                               @map("cover_url")
-  baseName  String?                               @map("base_name")
-  coords    Unsupported("geometry(Point, 4326)")?
-  verified  Boolean                               @default(false)
-  createdAt DateTime                              @default(now()) @map("created_at") @db.Timestamptz
+  baseName         String?                               @map("base_name")
+  whatsappGroupUrl String?                               @map("whatsapp_group_url")
+  coords           Unsupported("geometry(Point, 4326)")?
+  verified         Boolean                               @default(false)
+  createdAt        DateTime                              @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime                              @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations inverses

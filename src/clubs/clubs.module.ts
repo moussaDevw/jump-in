@@ -8,9 +8,10 @@ import { ClubFollowsController } from './club-follows.controller';
 import { ClubJoinRequestsService } from './club-join-requests.service';
 import { ClubJoinRequestsController } from './club-join-requests.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, NotificationsModule],
   controllers: [
     ClubsController,
     ClubMembersController,

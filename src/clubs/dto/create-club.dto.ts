@@ -34,6 +34,11 @@ export class CreateClubDto {
   baseName?: string;
 
   @IsOptional()
+  @IsString()
+  @IsUrl()
+  whatsappGroupUrl?: string;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => CoordsDto)
   coords?: CoordsDto;

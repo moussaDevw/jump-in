@@ -1,9 +1,11 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import { GetPresignedUrlDto } from './dto/get-presigned-url.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 
+@ApiTags('Upload')
 @Controller('upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}

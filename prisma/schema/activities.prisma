@@ -1,0 +1,49 @@
+model Activity {
+  id                  String             @id @default(uuid()) @db.Uuid
+  userId              String             @map("user_id") @db.Uuid
+  sportId             String?            @map("sport_id") @db.Uuid
+
+  /// Titre de l'activité (ex: "Course matinale aux Almadies")
+  title               String             @db.VarChar(120)
+  description         String?            @db.Text
+
+  /// Source de la séance
+  source              ActivitySource     @default(IN_APP_TRACKER)
+  /// Identifiant unique externe pour éviter les doublons lors des synchronisations Apple/Google
+  externalId          String?            @unique @map("external_id")
+
+  /// Horodatages de l'effort
+  startedAt           DateTime           @map("started_at") @db.Timestamptz
+  endedAt             DateTime           @map("ended_at") @db.Timestamptz
+
+  /// Métriques principales
+  durationSeconds     Int                @map("duration_seconds")
+  distanceMeters      Float              @map("distance_meters")
+  distanceKm          Float              @map("distance_km")
+  avgPaceSecPerKm     Int?               @map("avg_pace_sec_per_km") // Allure en sec/km (ex: 315 pour 5:15/km)
+
+  /// Métriques avancées (capteurs / dénivelé)
+  caloriesBurned      Int?               @map("calories_burned")
+  elevationGainMeters Float?             @map("elevation_gain_meters") // Dénivelé positif (D+)
+  avgHeartRate        Int?               @map("avg_heart_rate")
+  maxHeartRate        Int?               @map("max_heart_rate")
+
+  /// Tracé GPS compressé (Format Google/Strava Polyline)
+  polyline            String?            @db.Text
+
+  /// Visibilité et confidentialité
+  visibility          ActivityVisibility @default(PUBLIC)
+
+  /// Soft-delete
+  deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user                User               @relation("UserActivities", fields: [userId], references: [id], onDelete: Cascade)
+  sport               Sport?             @relation("SportActivities", fields: [sportId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
+  @@map("activities")
+}

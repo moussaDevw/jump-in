@@ -1,9 +1,11 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Body, Controller, Delete, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 import { DevicesService } from './devices.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 
+@ApiTags('Devices')
 @Controller('devices')
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}

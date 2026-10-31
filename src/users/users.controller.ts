@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Patch, Put, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -7,6 +8,7 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 
+@ApiTags('Users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Post, Delete, Get, Param, Query, Body, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { RegistrationsService } from './registrations.service';
 import { CheckInService } from './check-in.service';
@@ -6,6 +7,7 @@ import { EventOrganizerGuard } from '../guards/event-organizer.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../common/dto/api-response.dto';
 
+@ApiTags('Registrations & Check-in')
 @Controller('events')
 export class RegistrationsController {
   constructor(

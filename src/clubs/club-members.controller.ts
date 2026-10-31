@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { ClubMembersService } from './club-members.service';
 import { AddMemberDto } from './dto/add-member.dto';
@@ -7,6 +8,7 @@ import { ClubRoleGuard } from './guards/club-role.guard';
 import { ApiResponse } from '../common/dto/api-response.dto';
 import { ClubRole } from '@prisma/client';
 
+@ApiTags('Club Members')
 @Controller('clubs')
 export class ClubMembersController {
   constructor(private readonly clubMembersService: ClubMembersService) {}
