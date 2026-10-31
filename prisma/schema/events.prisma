@@ -1,9 +1,7 @@
 model Event {
   id          String                                @id @default(uuid()) @db.Uuid
   organizerId String                                @map("organizer_id") @db.Uuid
-  // Restrict explicite : on n'efface jamais un event via la suppression de l'organisateur
-  // (User est en soft-delete de toute façon).
-  organizer   User                                  @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Restrict)
+  organizer   User                                  @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Cascade)
   clubId      String?                               @map("club_id") @db.Uuid
   club        Club?                                 @relation("ClubEvents", fields: [clubId], references: [id], onDelete: SetNull)
   sportId     String                                @map("sport_id") @db.Uuid

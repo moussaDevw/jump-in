@@ -241,33 +241,65 @@ export class UsersService {
   }
 
   /**
-   * Soft-deletes a user account.
+   * Supprime définitivement le compte utilisateur et l'intégralité de ses données associées (RGPD / App Store).
    */
-  async softDelete(userId: string) {
+  async deleteAccount(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
     });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('Utilisateur introuvable');
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // Set deletedAt, nullify refresh token hash
-      await tx.user.update({
+      // 1. Supprimer les OTP par e-mail associés
+      if (user.email) {
+        await tx.emailOtp.deleteMany({
+          where: { email: user.email },
+        });
+      }
+
+      // 2. Clubs possédés : si aucun autre membre dans le club, supprimer le club
+      const ownedClubs = await tx.club.findMany({
+        where: { ownerId: userId },
+        include: { _count: { select: { members: true } } },
+      });
+
+      for (const club of ownedClubs) {
+        if (club._count.members <= 1) {
+          await tx.club.delete({ where: { id: club.id } });
+        }
+      }
+
+      // 3. Supprimer définitivement l'utilisateur.
+      // Déclenche les cascades ON DELETE CASCADE sur PostgreSQL :
+      // - identities (UserIdentity)
+      // - sports (UserSport)
+      // - organizedEvents (Event et ses galeries, inscriptions, etc.)
+      // - activities (Activity)
+      // - clubMemberships (ClubMember)
+      // - followedClubs (ClubFollow)
+      // - joinRequests (ClubJoinRequest)
+      // - registrations (Registration)
+      // - favorites (Favorite)
+      // - messages (Message)
+      // - likes (Like)
+      // - receivedNotifications (Notification)
+      // - devices (Device)
+      // - paymentMethods & payments (PaymentMethod, Payment)
+      await tx.user.delete({
         where: { id: userId },
-        data: {
-          deletedAt: new Date(),
-          refreshHash: null,
-        },
       });
+    }, { timeout: 25000 });
 
-      // Delete active devices to stop receiving push notifications
-      await tx.device.deleteMany({
-        where: { userId },
-      });
-    }, { timeout: 15000 });
+    return { success: true, message: 'Compte et données supprimés définitivement' };
+  }
 
-    return { success: true };
+  /**
+   * Alias de rétrocompatibilité.
+   */
+  async softDelete(userId: string) {
+    return this.deleteAccount(userId);
   }
 
   // --- Helper methods ---

@@ -1,4 +1,4 @@
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Patch, Put, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -75,8 +75,9 @@ export class UsersController {
 
   @Delete('me')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Suppression définitive du compte et de toutes ses données (RGPD / App Store)' })
   async deleteAccount(@CurrentUser('id') userId: string) {
-    const result = await this.usersService.softDelete(userId);
-    return ApiResponse.success(result, 'Account deleted successfully');
+    const result = await this.usersService.deleteAccount(userId);
+    return ApiResponse.success(result, result.message);
   }
 }
