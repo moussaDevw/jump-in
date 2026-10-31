@@ -14,7 +14,16 @@ export class DevicesService {
    * If the token already existed on another account or was revoked, it re-binds to this user and un-revokes.
    */
   async registerDevice(userId: string, dto: RegisterDeviceDto): Promise<Device> {
-    const { pushToken, platform } = dto;
+    const { pushToken, platform, locale } = dto;
+
+    if (locale) {
+      await this.prisma.user
+        .update({
+          where: { id: userId },
+          data: { locale },
+        })
+        .catch((e) => this.logger.warn(`Could not update user locale: ${e.message}`));
+    }
 
     const device = await this.prisma.device.upsert({
       where: { pushToken },

@@ -1,8 +1,10 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Post, Delete, Get, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { InteractionsService } from './interactions.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../common/dto/api-response.dto';
 
+@ApiTags('Event Favorites')
 @Controller('events')
 export class FavoritesController {
   constructor(private readonly interactionsService: InteractionsService) {}

@@ -11,6 +11,7 @@ model User {
   /// Mode éco-data (images basse résolution pour économiser la bande passante réseau)
   ecoData      Boolean                               @default(false) @map("eco_data")
   notifEnabled Boolean                               @default(true) @map("notif_enabled")
+  locale       String                                @default("fr")
   onboardingCompleted Boolean                               @default(false) @map("onboarding_completed")
   isAdmin             Boolean                               @default(false) @map("is_admin")
   /// Soft-delete : ne JAMAIS supprimer physiquement un User (préserve messages, inscriptions,
@@ -37,6 +38,7 @@ model User {
   clubMemberships        ClubMember[]
   ownedClubs             Club[]          @relation("ClubOwner")
   joinRequests           ClubJoinRequest[]
+  activities             Activity[]      @relation("UserActivities")
 
   /// Hash bcrypt du refresh token actif
   refreshHash  String?   @map("refresh_hash")
@@ -48,8 +50,8 @@ model User {
 model UserIdentity {
   id         String   @id @default(uuid()) @db.Uuid
   userId     String   @map("user_id") @db.Uuid
-  provider   String   // 'google' | 'apple'
-  providerId String   @map("provider_id") // Identifiant unique du provider ('sub')
+  provider   String   // 'google' | 'apple' | 'email'
+  providerId String   @map("provider_id") // Identifiant unique du provider ('sub' ou email)
   email      String?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -57,4 +59,17 @@ model UserIdentity {
 
   @@unique([provider, providerId])
   @@map("user_identities")
+}
+
+model EmailOtp {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  codeHash  String   @map("code_hash")
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("email_otps")
 }

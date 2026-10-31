@@ -1,18 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { FindAllEventsDto } from './dto/find-all-events.dto';
-import { EventStatus, ClubRole, Prisma } from '@prisma/client';
+import { EventStatus, ClubRole, Prisma, NotificationType } from '@prisma/client';
 import { CodeGeneratorService } from '../common/services/code-generator.service';
 import { GeoSpatialService } from '../common/services/geospatial.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly codeGenerator: CodeGeneratorService,
     private readonly geoSpatial: GeoSpatialService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   /**
@@ -230,9 +234,84 @@ export class EventsService {
       throw new BadRequestException('Cannot publish a cancelled event');
     }
 
-    return this.prisma.event.update({
+    const updated = await this.prisma.event.update({
       where: { id },
       data: { status: EventStatus.PUBLISHED },
+    });
+
+    // Notifier de façon asynchrone les membres du club et les utilisateurs ayant ce sport en favori
+    this.notifyInterestedUsers(id).catch((err) => {
+      this.logger.error(`Error notifying users for event ${id}`, err);
+    });
+
+    return updated;
+  }
+
+  /**
+   * Notifie les membres du club ou les adeptes du sport lors de la publication d'un événement.
+   */
+  private async notifyInterestedUsers(eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        sport: true,
+        club: true,
+      },
+    });
+
+    if (!event) return;
+
+    const organizerId = event.organizerId;
+    const targetUserIds = new Set<string>();
+
+    // 1. Si l'événement est rattaché à un club, notifier les membres du club (sauf l'organisateur)
+    if (event.clubId) {
+      const clubMembers = await this.prisma.clubMember.findMany({
+        where: {
+          clubId: event.clubId,
+          userId: { not: organizerId },
+        },
+        select: { userId: true },
+      });
+      for (const cm of clubMembers) {
+        targetUserIds.add(cm.userId);
+      }
+    }
+
+    // 2. Notifier les utilisateurs ayant ce sport parmi leurs sports favoris
+    if (event.sportId) {
+      const sportFollowers = await this.prisma.userSport.findMany({
+        where: {
+          sportId: event.sportId,
+          userId: { not: organizerId },
+        },
+        select: { userId: true },
+      });
+      for (const sf of sportFollowers) {
+        targetUserIds.add(sf.userId);
+      }
+    }
+
+    if (targetUserIds.size === 0) return;
+
+    const userIdsArray = Array.from(targetUserIds);
+    const isClubEvent = !!event.club?.name;
+
+    await this.notificationsService.sendLocalizedToUsers(userIdsArray, {
+      type: NotificationType.SPOT,
+      template: isClubEvent ? 'CLUB_EVENT_CREATED' : 'SPORT_EVENT_CREATED',
+      params: {
+        clubName: event.club?.name || '',
+        sportName: event.sport?.labelFr || event.sport?.slug || 'Sport',
+        eventTitle: event.title,
+      },
+      actorId: organizerId,
+      eventId: event.id,
+      data: {
+        eventId: event.id,
+        clubId: event.clubId || undefined,
+        sportId: event.sportId,
+      },
     });
   }
 

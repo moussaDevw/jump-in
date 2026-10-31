@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Query } from '@nestjs/common';
 import { FeedService } from './feed.service';
 import { FeedQueryDto } from './dto/feed-query.dto';
@@ -6,6 +7,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 
+@ApiTags('Feed')
 @Controller('feed')
 export class FeedController {
   constructor(private readonly feedService: FeedService) {}

@@ -1,8 +1,10 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Post, Delete, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { ClubFollowsService } from './club-follows.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApiResponse } from '../common/dto/api-response.dto';
 
+@ApiTags('Club Follows')
 @Controller('clubs')
 export class ClubFollowsController {
   constructor(private readonly clubFollowsService: ClubFollowsService) {}

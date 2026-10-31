@@ -26,6 +26,11 @@ export class UpdateEventDto {
   coverUrl?: string;
 
   @IsOptional()
+  @IsString()
+  @IsUrl()
+  whatsappGroupUrl?: string;
+
+  @IsOptional()
   @IsDateString()
   startsAt?: string;
 

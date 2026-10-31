@@ -194,11 +194,19 @@ export class ClubMembersService {
       }
     }
 
-    await this.prisma.clubMember.delete({
-      where: {
-        clubId_userId: { clubId, userId: memberId },
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.clubMember.delete({
+        where: {
+          clubId_userId: { clubId, userId: memberId },
+        },
+      }),
+      this.prisma.clubJoinRequest.deleteMany({
+        where: {
+          clubId,
+          userId: memberId,
+        },
+      }),
+    ]);
 
     return { success: true };
   }

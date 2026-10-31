@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { ClubJoinRequestsService } from './club-join-requests.service';
 import { RespondJoinRequestDto } from './dto/respond-join-request.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -7,6 +8,7 @@ import { ClubRoleGuard } from './guards/club-role.guard';
 import { ApiResponse } from '../common/dto/api-response.dto';
 import { ClubRole } from '@prisma/client';
 
+@ApiTags('Club Join Requests')
 @Controller('clubs')
 export class ClubJoinRequestsController {
   constructor(private readonly clubJoinRequestsService: ClubJoinRequestsService) {}
@@ -41,5 +43,15 @@ export class ClubJoinRequestsController {
   ) {
     const result = await this.clubJoinRequestsService.respondToJoinRequest(clubId, requestId, dto.status);
     return ApiResponse.success(result, `Join request ${dto.status.toLowerCase()} successfully`);
+  }
+
+  @Delete(':id/join-requests')
+  @HttpCode(HttpStatus.OK)
+  async cancelJoinRequest(
+    @Param('id', ParseUUIDPipe) clubId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    const result = await this.clubJoinRequestsService.cancelJoinRequest(clubId, userId);
+    return ApiResponse.success(result, 'Join request cancelled successfully');
   }
 }

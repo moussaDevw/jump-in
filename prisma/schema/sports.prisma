@@ -5,9 +5,10 @@ model Sport {
   color   String
 
   // Relations inverses
-  events Event[]     @relation("SportEvents")
-  users  UserSport[]
-  clubs  ClubSport[]
+  events     Event[]     @relation("SportEvents")
+  users      UserSport[]
+  clubs      ClubSport[]
+  activities Activity[]  @relation("SportActivities")
 
   @@map("sports")
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsBoolean } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsIn } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -8,4 +8,9 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsBoolean()
   notifEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['fr', 'en'])
+  locale?: string;
 }

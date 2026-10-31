@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { GalleryService } from './gallery.service';
 import { AddPhotoDto } from '../dto/add-photo.dto';
@@ -5,6 +6,7 @@ import { ReorderGalleryDto } from '../dto/reorder-gallery.dto';
 import { EventOrganizerGuard } from '../guards/event-organizer.guard';
 import { ApiResponse } from '../../common/dto/api-response.dto';
 
+@ApiTags('Event Gallery')
 @Controller('events')
 export class GalleryController {
   constructor(private readonly galleryService: GalleryService) {}

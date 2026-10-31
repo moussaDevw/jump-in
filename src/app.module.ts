@@ -18,6 +18,8 @@ import { UploadModule } from './upload/upload.module';
 import { LocationModule } from './location/location.module';
 import { FeedModule } from './feed/feed.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ActivitiesModule } from './activities/activities.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ]),
     CommonModule,
     PrismaModule,
+    MailModule,
     AuthModule,
     UsersModule,
     SportsModule,
@@ -48,6 +51,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     LocationModule,
     FeedModule,
     NotificationsModule,
+    ActivitiesModule,
   ],
   controllers: [AppController],
   providers: [

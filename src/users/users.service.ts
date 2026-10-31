@@ -104,6 +104,7 @@ export class UsersService {
         id: true,
         ecoData: true,
         notifEnabled: true,
+        locale: true,
       },
     });
   }
