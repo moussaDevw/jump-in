@@ -31,9 +31,12 @@ export class UsersService {
     }
 
     // Check username uniqueness if changing
-    if (dto.username && dto.username !== user.username) {
-      const usernameExists = await this.prisma.user.findUnique({
-        where: { username: dto.username },
+    if (dto.username && (!user.username || dto.username.toLowerCase() !== user.username.toLowerCase())) {
+      const usernameExists = await this.prisma.user.findFirst({
+        where: {
+          username: { equals: dto.username, mode: 'insensitive' },
+          id: { not: userId },
+        },
       });
       if (usernameExists) {
         throw new ConflictException('Username is already taken');
