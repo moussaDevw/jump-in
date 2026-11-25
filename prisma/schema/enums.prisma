@@ -10,10 +10,9 @@ enum EventVisibility {
 }
 
 enum PaymentProvider {
-  WAVE         @map("wave")
-  ORANGE_MONEY @map("orange_money")
-  FREE_MONEY   @map("free_money")
-  CARD         @map("card")
+  wave_money
+  orange_money
+  card
 }
 
 enum RegistrationStatus {

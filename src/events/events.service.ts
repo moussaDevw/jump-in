@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { FindAllEventsDto } from './dto/find-all-events.dto';
-import { EventStatus, ClubRole, Prisma, NotificationType } from '@prisma/client';
+import { EventStatus, ClubRole, Prisma, NotificationType, RegistrationStatus } from '@prisma/client';
 import { CodeGeneratorService } from '../common/services/code-generator.service';
 import { GeoSpatialService } from '../common/services/geospatial.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -146,6 +146,26 @@ export class EventsService {
 
     if (event.status === EventStatus.CANCELLED) {
       throw new BadRequestException('Cannot update a cancelled event');
+    }
+
+    // Interdire la modification du tarif ou de la devise s'il existe déjà des inscriptions actives
+    const isChangingPrice =
+      dto.price !== undefined && dto.price !== event.price;
+    const isChangingCurrency =
+      dto.currency !== undefined && dto.currency !== event.currency;
+
+    if (isChangingPrice || isChangingCurrency) {
+      const activeRegistrations = await this.prisma.registration.count({
+        where: {
+          eventId: id,
+          status: { not: RegistrationStatus.CANCELLED },
+        },
+      });
+      if (activeRegistrations > 0) {
+        throw new BadRequestException(
+          'Impossible de modifier le prix ou la devise d’un événement ayant déjà des inscriptions actives.',
+        );
+      }
     }
 
     const { coords, clubId, sportId, startsAt, endsAt, ...dataToUpdate } = dto;
@@ -434,7 +454,7 @@ export class EventsService {
         const daysToSunday = day === 0 ? 0 : 7 - day;
         end.setDate(end.getDate() + daysToSunday);
         end.setHours(23, 59, 59, 999);
-        
+
         let start = new Date();
         if (day < 5 || (day === 5 && now.getHours() < 17)) {
           start.setDate(start.getDate() + (5 - day));

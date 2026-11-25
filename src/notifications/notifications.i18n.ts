@@ -8,7 +8,9 @@ export type NotificationTemplateKey =
   | 'SPORT_EVENT_CREATED'
   | 'EVENT_REGISTRATION'
   | 'EVENT_CANCELLATION'
-  | 'SPOT_AVAILABLE';
+  | 'SPOT_AVAILABLE'
+  | 'PAYMENT_SUCCESS'
+  | 'PAYMENT_FAILED';
 
 export interface NotificationContent {
   title: string;
@@ -21,6 +23,8 @@ export interface NotificationTemplateParams {
   sportName?: string;
   eventTitle?: string;
   participantName?: string;
+  amount?: number;
+  currency?: string;
   [key: string]: any;
 }
 
@@ -106,6 +110,26 @@ const templates: Record<
     en: (p) => ({
       title: 'A spot just opened up!',
       body: `A spot is available again for « ${p.eventTitle || ''} »`,
+    }),
+  },
+  PAYMENT_SUCCESS: {
+    fr: (p) => ({
+      title: 'Paiement confirmé !',
+      body: `Votre paiement de ${p.amount ?? ''} ${p.currency || 'XOF'} pour « ${p.eventTitle || ''} » est validé. Votre billet est prêt !`,
+    }),
+    en: (p) => ({
+      title: 'Payment confirmed!',
+      body: `Your payment of ${p.amount ?? ''} ${p.currency || 'XOF'} for « ${p.eventTitle || ''} » is confirmed. Your ticket is ready!`,
+    }),
+  },
+  PAYMENT_FAILED: {
+    fr: (p) => ({
+      title: 'Échec du paiement',
+      body: `Le paiement pour « ${p.eventTitle || ''} » n'a pas pu aboutir. Vous pouvez réessayer depuis votre billet.`,
+    }),
+    en: (p) => ({
+      title: 'Payment failed',
+      body: `The payment for « ${p.eventTitle || ''} » could not be completed. You can retry from your ticket.`,
     }),
   },
 };

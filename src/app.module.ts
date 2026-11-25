@@ -20,6 +20,7 @@ import { FeedModule } from './feed/feed.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { MailModule } from './mail/mail.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { MailModule } from './mail/mail.module';
     FeedModule,
     NotificationsModule,
     ActivitiesModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [
