@@ -24,7 +24,6 @@ model User {
   identities             UserIdentity[]
   organizedEvents        Event[]         @relation("UserEvents")
   sports                 UserSport[]
-  paymentMethods         PaymentMethod[]
   registrations          Registration[]  @relation("UserRegistrations")
   checkedInRegistrations Registration[]  @relation("RegistrationsCheckedIn")
   payments               Payment[]       @relation("UserPayments")

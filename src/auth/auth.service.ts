@@ -192,7 +192,13 @@ export class AuthService {
       },
     });
 
-    await this.mailService.sendOtpCode(dto.email, code);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: { locale: true },
+    });
+    const locale = (existingUser?.locale as 'fr' | 'en') || 'fr';
+
+    await this.mailService.sendOtpCode(dto.email, code, locale);
 
     return {
       message: 'Un code de vérification à 6 chiffres a été envoyé à votre adresse e-mail.',
