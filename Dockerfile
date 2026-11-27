@@ -32,7 +32,7 @@ WORKDIR /usr/src/app
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-ENV NODE_ENV=production
+ENV NODE_ENV=dev
 ENV PORT=3000
 
 # Copie uniquement des artefacts nécessaires depuis le stage builder avec les droits de l'utilisateur 'node'
